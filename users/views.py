@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.utils.timezone import now
 from rest_framework import status, generics
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
@@ -6,11 +7,11 @@ from .models import User
 from .serializers import UserSerializer, UserRegistrationSerializer, CustomTokenObtainPairSerializer, \
     UserProfileSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from .permissions import IsAdminPermission
 
 
-class UserRegistrationView(generics.CreateAPIView):
+class RegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
-    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -20,17 +21,21 @@ class UserRegistrationView(generics.CreateAPIView):
         )
 
 
-class UserDetailView(generics.RetrieveAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
-
-
-class CustomTokenObtainPairView(TokenObtainPairView):
+class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.user
+            user.last_login = now()
+            user.save()
 
-class UserProfileView(generics.UpdateAPIView):
+        return response
+
+
+class ProfileUpdateView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -46,10 +51,10 @@ class UserProfileView(generics.UpdateAPIView):
         }, status=status.HTTP_200_OK)
 
 
-class AdminRoleUpdateView(generics.UpdateAPIView):
+class RoleUpdateView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminPermission]
 
     def update(self, request, *args, **kwargs):
         user = self.get_object()
@@ -67,6 +72,10 @@ class AdminRoleUpdateView(generics.UpdateAPIView):
             )
 
         user.role = new_role
+        if new_role == 'admin':
+            user.is_staff = True
+        else:
+            user.is_staff = False
         user.save()
 
         return Response(
