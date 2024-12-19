@@ -1,13 +1,12 @@
-from django.shortcuts import render
+from django.http import Http404
 from django.utils.timezone import now
 from rest_framework import status, generics
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from .models import User
-from .serializers import UserSerializer, UserRegistrationSerializer, CustomTokenObtainPairSerializer, \
+from .serializers import UserRegistrationSerializer, CustomTokenObtainPairSerializer, \
     UserProfileSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .permissions import IsAdminPermission
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 
 class RegistrationView(generics.CreateAPIView):
@@ -35,11 +34,29 @@ class LoginView(TokenObtainPairView):
         return response
 
 
-class ProfileUpdateView(generics.UpdateAPIView):
+class UserListView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
+
+class UserDetailView(generics.RetrieveAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAdminUser]
+    lookup_field = 'id'
+
+    def get_object(self):
+        user_id = self.kwargs.get('id')
+        try:
+            return User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            raise Http404
+
+
+class ProfileUpdateView(generics.UpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
     def get_object(self):
         return self.request.user
 
@@ -52,9 +69,10 @@ class ProfileUpdateView(generics.UpdateAPIView):
 
 
 class RoleUpdateView(generics.UpdateAPIView):
-    queryset = User.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAdminPermission]
+    permission_classes = [IsAdminUser]
+    lookup_field = 'id'
+    queryset = User.objects.all()
 
     def update(self, request, *args, **kwargs):
         user = self.get_object()
@@ -85,3 +103,20 @@ class RoleUpdateView(generics.UpdateAPIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+class UserDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAdminUser]
+    lookup_field = 'id'
+    queryset = User.objects.all()
+
+    def delete(self, request, *args, **kwargs):
+        user = self.get_object()
+        if user == request.user:
+            return Response(
+                {"detail": "You cannot delete your own account."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return super().delete(request, *args, **kwargs)
+

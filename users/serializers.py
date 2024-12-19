@@ -52,3 +52,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance.bio = validated_data.get('bio', instance.bio)
         instance.save()
         return instance
+
+
+
